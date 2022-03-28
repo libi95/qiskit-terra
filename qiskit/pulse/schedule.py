@@ -51,12 +51,35 @@ from qiskit.pulse.utils import instruction_duration_validation
 from qiskit.utils.multiprocessing import is_main_process
 
 
+# Imports
+from ast import Del
+from qiskit.pulse import (Play, Delay, ShiftPhase, SetPhase, SetFrequency,
+                       ShiftFrequency, DriveChannel, MeasureChannel, ControlChannel, Constant)
+
+
+
 Interval = Tuple[int, int]
 """An interval type is a tuple of a start time (inclusive) and an end time (exclusive)."""
 
 TimeSlots = Dict[Channel, List[Interval]]
 """List of timeslots occupied by instructions for each channel."""
 
+def merge_slots_pulse_delay(pulse_slot,delay_slot): # returns new delay-slot. 
+    if delay_slot[0] < pulse_slot[0] and delay_slot[1]> pulse_slot[0]:
+        return  (delay_slot[0],pulse_slot[0])
+    elif delay_slot[0] < pulse_slot[1] and delay_slot[1]> pulse_slot[1]:
+        return (pulse_slot[1],delay_slot[1])
+    else:
+        return None
+
+def expand_slot(slot_inner, slot_outer): 
+    if slots_overlap(slot_inner, slot_outer):
+        return (min(slot_inner[0], slot_outer[0]), max(slot_inner[1], slot_outer[1]))
+    else: 
+        ValueError('slots do not overlap !!!')
+
+def slots_overlap(slot_inner, slot_outer): 
+    return slot_outer[0]<=slot_inner[0]  or slot_inner[1]<=slot_outer[1]
 
 class Schedule:
     """A quantum program *schedule* with exact time constraints for its instructions, operating
@@ -387,16 +410,153 @@ class Schedule:
             return self._mutable_insert(start_time, schedule)
         return self._immutable_insert(start_time, schedule, name=name)
 
-    def _mutable_insert(self, start_time: int, schedule: "ScheduleComponent") -> "Schedule":
+    def _mutable_insert(self, start_time: int, schedule: ScheduleComponent) -> "Schedule":
         """Mutably insert `schedule` into `self` at `start_time`.
 
         Args:
             start_time: Time to insert the second schedule.
             schedule: Schedule to mutably insert.
         """
+
+        # here we have to calculate a new start time, since the DP channels should not be regarded for this
+        # get DP-channels from backend_configuration: 
+        dp_channels_idx = [24, 1]
+        dp_channels = [DriveChannel(i) for i in dp_channels_idx]
+        channels_dp_common = list(set(self.channels) & set(schedule.channels) & set(dp_channels))
+
+        is_sched = False
+        if isinstance(schedule,Schedule):
+            if len(list(set(schedule.channels) - set(dp_channels))) != 0 and len(list(set(self.channels) & set(schedule.channels) & set(dp_channels))) != 0:  # need to share at least one DP channel, and the added schedule needs to have at least one SP. 
+
+                # get shared DP-channels 
+                """for channel_dp in channels_dp_common:
+                sched_channel_dp_self   = self.filter(channels = channel_dp)
+                sched_channel_dp        = schedule.filter(channels=channel_dp)
+                #exclude common DP channel, and generate overlapping DP channel
+                self = self.exclude(channels = channel_dp)
+                schedule = schedule.exclude(channels = channel_dp)
+                dp_sched = merge_channels(sched_channel_dp_self, sched_channel_dp, channel_dp, time_shift=start_time) # TODO: diesenhier ändern..
+                self.append(dp_sched, inplace = True)
+                self._renew_timeslots() """
+                # alternative: without merge_channels..
+                def key(time_inst_pair):
+                        inst = time_inst_pair[1]
+                        return time_inst_pair[0], inst.duration, sorted(chan.name for chan in inst.channels)
+
+                def _overlaps(first: Interval, second: Interval) -> bool:
+                    """Return True iff first and second overlap.
+                    Note: first.stop may equal second.start, since Interval stop times are exclusive.
+                    """
+                    if first[0] == second[0] == second[1]:
+                        # They fail to overlap if one of the intervals has duration 0
+                        return False
+                    if first[0] > second[0]:
+                        first, second = second, first
+                    return second[0] < first[1]
+
+                #print('merging dp channels')
+
+                for channel_dp in channels_dp_common:
+                    #exclude delays
+                    #print('start_time', channel_dp, start_time)
+
+                    sched1_instructions = self.filter(channels=channel_dp,time_ranges=[(start_time, self.duration)] ).instructions #.exclude(channels=channel_dp, instruction_types=Delay)
+                    sched2_instructions = schedule.filter(channels=channel_dp).shift(start_time, inplace=False).instructions #.exclude(channels=channel_dp, instruction_types=Delay)
+                    # hier eventuell ein problem !! ?
+                    sched_instructions = list(tuple(sorted(sched1_instructions + sched2_instructions, key=key)))  # sort instruction...
+                    #print('instructions', sched_instructions)
+                    new_instructions = []
+                    while(len(sched_instructions) != 0):
+                        (t_outer, inst_outer) = sched_instructions.pop(0)
+                        int_outer = (t_outer, t_outer + inst_outer.duration)
+                        for (t_inner, inst_inner) in sched_instructions:
+                            int_inner = (t_inner, t_inner + inst_inner.duration)
+                            if _overlaps(int_outer, int_inner):
+                                if inst_outer.duration != 0 and inst_inner.duration != 0 :  # both overlapping instructions are Plays or Delays !!
+                                    # merge the play pulses !!
+                                    if isinstance(inst_outer, Play) and isinstance(inst_inner, Play):
+                                        #int_new = expand_slot(int_outer, int_inner)
+                                        
+                                        """ dur_new = int_new[1] - int_new[0]
+                                        #amp_new = inst_outer.operands[0].amp
+                                        amp_new = inst_outer.pulse.amp
+                                        channel_new = inst_outer.channel
+                                        inst_outer = Play(Constant(dur_new, amp_new),channel_new)    # TODO: maybe change here because of different pulses (static, logic etc. ) """
+
+                                        #inst_outer = Play(inst_outer.merge(inst_inner),channel_new)  
+                                        inst_outer.pulse.merge(inst_inner.pulse,int_outer, int_inner)
+                                        int_outer = expand_slot(int_outer, int_inner)
+                                        t_outer = int_outer[0]
+                                        sched_instructions.remove((t_inner, inst_inner))
+                                    elif isinstance(inst_outer, Play) and isinstance(inst_inner, Delay):
+                                        int_new = merge_slots_pulse_delay(int_outer, int_inner)
+
+                                        if int_new: 
+                                            dur_new = int_new[1] - int_new[0]
+                                            channel_new = inst_outer.channel
+                                            inst_new = Delay(dur_new, channel_new)
+                                            sched_instructions.remove((t_inner, inst_inner))
+                                            sched_instructions.append((int_new[0],inst_new))
+                                            sched1_instructions.sort(key=key)
+                                        else:  # remove if delay slot is inside pulse slot
+                                            sched_instructions.remove((t_inner, inst_inner))
+                                    elif isinstance(inst_outer, Delay) and isinstance(inst_inner, Play):
+                                        int_new = merge_slots_pulse_delay(int_outer, int_inner)
+
+                                        if int_new: 
+                                            dur_new = int_new[1] - int_new[0]
+                                            channel_new = inst_outer.channel
+                                            inst_outer = Delay(dur_new, channel_new)
+                                            int_outer = int_new # new interval
+                                            t_outer = int_outer[0]
+                                        else: 
+                                            t_outer = None
+                                            inst_outer = None
+                                            int_outer = None
+                                    elif isinstance(inst_outer, Delay) and isinstance(inst_outer, Delay):
+                                            int_new = expand_slot(int_outer, int_inner)
+                                            dur_new = int_new[1] - int_new[0]
+                                            channel_new = inst_outer.channel
+                                            inst_outer = Delay(dur_new, channel_new)
+                                            sched_instructions.remove((t_inner, inst_inner))
+
+
+                                elif inst_outer.duration == 0 and inst_inner.duration != 0: 
+                                    # insert to the front. 
+                                    t_outer = t_inner # Insert at the front of the mabe to the back?..
+                                elif inst_outer.duration != 0 and inst_inner.duration == 0: 
+                                    # insert  second one to the front, to the front. 
+                                    # don nothing gets handled by the above satements.
+                                    
+                                    sched_instructions.remove((t_inner, inst_inner))
+
+                        if inst_outer:
+                            new_instructions.append((t_outer, inst_outer))
+
+                    new_instructions = list(tuple(sorted(new_instructions, key=key)))  # sort instruction...
+
+                    #self = self.exclude(channels = channel_dp,time_ranges=[(start_time, self.duration)])
+                    #print('self exclude before', self)
+                    self = self.exclude(channels = channel_dp,time_ranges=[(start_time, self.duration)])
+                    #print('self exclude after', self)
+                    schedule = schedule.exclude(channels=channel_dp )
+
+                    #print('new_instructions',new_instructions)
+                    for t, inst in new_instructions: 
+                        #print('inserted', t,inst)
+                        self.insert(t, inst, inplace = True)
+
+                    #self._renew_timeslots()
+                    #schedule._renew_timeslots()
+                    #print('DP-channel, self',  self)
+                    #print('schedule', schedule)
+                    is_sched = True
+
+
         self._add_timeslots(start_time, schedule)
         self._children.append((start_time, schedule))
         self._parameter_manager.update_parameter_table(schedule)
+        #if is_sched: print('self.children', self)
         return self
 
     def _immutable_insert(
@@ -417,7 +577,7 @@ class Schedule:
         return new_sched
 
     def append(
-        self, schedule: "ScheduleComponent", name: Optional[str] = None, inplace: bool = False
+        self, schedule: ScheduleComponent, name: Optional[str] = None, inplace: bool = False
     ) -> "Schedule":
         r"""Return a new schedule with ``schedule`` inserted at the maximum time over
         all channels shared between ``self`` and ``schedule``.
@@ -433,9 +593,21 @@ class Schedule:
             inplace: Perform operation inplace on this schedule. Otherwise
                 return a new ``Schedule``.
         """
-        common_channels = set(self.channels) & set(schedule.channels)
+        # here we have to calculate a new start time, since the DP channels should not be regarded for this
+            # get DP-channels from backend_configuration: 
+        dp_channels_idx = [24, 1]
+        dp_channels = [DriveChannel(i) for i in dp_channels_idx]   # TODO: change to only the insert point is the SP-Channel to do overlapping. Solve later. 
+
+        if len(list(set(schedule.channels) - set(dp_channels))) == 0 or len(list(set(schedule.channels) & set(dp_channels))) == 0 : # Only DP channels are aded: treat as normal.    // when Sched keinen Nur SP order nur DP ist, dann füge normal ein. Wenn DP + SP, und der DP mit dem anderen Sched geteilt wird, dann füge nach der Zeit vom SP ein. 
+            common_channels = set(self.channels) & set(schedule.channels)
+        else: 
+            common_channels = set(self.channels) & set(schedule.channels) - set(dp_channels) # excude DP-channels to find insertion time. 
+
         time = self.ch_stop_time(*common_channels)
-        return self.insert(time, schedule, name=name, inplace=inplace)
+        #print(f'time: {time}, common_channels: {common_channels}')
+        new_sched = self.insert(time, schedule, name=name, inplace=inplace)
+
+        return new_sched
 
     def filter(
         self,

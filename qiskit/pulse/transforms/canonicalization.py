@@ -25,6 +25,7 @@ from qiskit.pulse.instructions import directives
 from qiskit.pulse.schedule import Schedule, ScheduleBlock, ScheduleComponent
 
 
+#@patch('pulse.transforms.block_to_schedule')
 def block_to_schedule(block: ScheduleBlock) -> Schedule:
     """Convert ``ScheduleBlock`` to ``Schedule``.
 
@@ -51,7 +52,9 @@ def block_to_schedule(block: ScheduleBlock) -> Schedule:
     for op_data in block.blocks:
         if isinstance(op_data, ScheduleBlock):
             context_schedule = block_to_schedule(op_data)
+            #print('context_schedule', context_schedule)
             if hasattr(op_data.alignment_context, "duration"):
+                #print('has aligment context duration.')
                 # context may have local scope duration, e.g. EquispacedAlignment for 1000 dt
                 post_buffer = op_data.alignment_context.duration - context_schedule.duration
                 if post_buffer < 0:
@@ -62,19 +65,21 @@ def block_to_schedule(block: ScheduleBlock) -> Schedule:
                     )
             else:
                 post_buffer = 0
-            schedule.append(context_schedule, inplace=True)
-
+            #print('post_buffer', post_buffer)
+            #print('schedule_bevore', schedule)
+            schedule = schedule.append(context_schedule, inplace=True)   # LB: Don't know why but I had to overwrite this..
+            #print('schedule after', schedule)
             # prevent interruption by following instructions.
             # padding with delay instructions is no longer necessary, thanks to alignment context.
             if post_buffer > 0:
                 context_boundary = instructions.RelativeBarrier(*op_data.channels)
-                schedule.append(context_boundary.shift(post_buffer), inplace=True)
+                schedule = schedule.append(context_boundary.shift(post_buffer), inplace=True)
         else:
-            schedule.append(op_data, inplace=True)
+            schedule = schedule.append(op_data, inplace=True)            # LB: Don't know why but I had to overwrite this..
 
     # transform with defined policy
-    return block.alignment_context.align(schedule)
-
+    #return block.alignment_context.align(schedule)
+    return schedule
 
 def compress_pulses(schedules: List[Schedule]) -> List[Schedule]:
     """Optimization pass to replace identical pulses.
