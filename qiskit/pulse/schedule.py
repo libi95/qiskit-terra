@@ -51,9 +51,9 @@ from qiskit.utils.multiprocessing import is_main_process
 
 
 # Imports
-from ast import Del
-from qiskit.pulse import (Play, Delay, ShiftPhase, SetPhase, SetFrequency,
-                       ShiftFrequency, DriveChannel, MeasureChannel, ControlChannel, Constant)
+#from ast import Del
+#from qiskit.pulse import (Play, Delay, ShiftPhase, SetPhase, SetFrequency,
+#                       ShiftFrequency, DriveChannel, MeasureChannel, ControlChannel, Constant)
 
 
 
