@@ -420,6 +420,7 @@ class Schedule:
 
         # here we have to calculate a new start time, since the DP channels should not be regarded for this
         # get DP-channels from backend_configuration: 
+        from qiskit.pulse import DriveChannel,Play, Delay
         dp_channels_idx = [24, 1]
         dp_channels = [DriveChannel(i) for i in dp_channels_idx]
         channels_dp_common = list(set(self.channels) & set(schedule.channels) & set(dp_channels))
@@ -595,6 +596,7 @@ class Schedule:
         """
         # here we have to calculate a new start time, since the DP channels should not be regarded for this
             # get DP-channels from backend_configuration: 
+        from qiskit.pulse import DriveChannel
         dp_channels_idx = [24, 1]
         dp_channels = [DriveChannel(i) for i in dp_channels_idx]   # TODO: change to only the insert point is the SP-Channel to do overlapping. Solve later. 
 

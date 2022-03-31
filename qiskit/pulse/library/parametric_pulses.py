@@ -498,7 +498,7 @@ class Constant(ParametricPulse):
         name: Optional[str] = None,
         limit_amplitude: Optional[bool] = None,
         transition = None, 
-        starks_shift_param = None, 
+        stark_shift_param = None, 
         correct_phase = False
     ):
         """
@@ -517,7 +517,7 @@ class Constant(ParametricPulse):
         self._amp = amp
         super().__init__(duration=duration, name=name, limit_amplitude=limit_amplitude)
         self.transition = transition
-        self.stark_shit_param = starks_shift_param
+        self.stark_shift_param = stark_shift_param
         self.correct_phase = correct_phase
     @property
     def amp(self) -> Union[complex, ParameterExpression]:
