@@ -496,10 +496,7 @@ class Constant(ParametricPulse):
         duration: Union[int, ParameterExpression],
         amp: Union[complex, ParameterExpression],
         name: Optional[str] = None,
-        limit_amplitude: Optional[bool] = None,
-        transition = None, 
-        stark_shift_param = None, 
-        correct_phase = False
+        limit_amplitude: Optional[bool] = None
     ):
         """
         Initialize the constant-valued pulse.
@@ -516,9 +513,6 @@ class Constant(ParametricPulse):
             amp = complex(amp)
         self._amp = amp
         super().__init__(duration=duration, name=name, limit_amplitude=limit_amplitude)
-        self.transition = transition
-        self.stark_shift_param = stark_shift_param
-        self.correct_phase = correct_phase
     @property
     def amp(self) -> Union[complex, ParameterExpression]:
         """The constant value amplitude."""
@@ -536,7 +530,7 @@ class Constant(ParametricPulse):
 
     @property
     def parameters(self) -> Dict[str, Any]:
-        return {"duration": self.duration, "amp": self.amp,'transition':self.transition, 'stark_shift_param':self.stark_shift_param , 'correct_phase': self.correct_phase}
+        return {"duration": self.duration, "amp": self.amp}
 
     def __repr__(self) -> str:
         return "{}(duration={}, amp={}{})".format(

@@ -1698,8 +1698,7 @@ def delay(duration: int, channel: chans.Channel, name: Optional[str] = None):
 
 
 def play(
-    pulse: Union[library.Pulse, np.ndarray], channel: chans.PulseChannel, name: Optional[str] = None
-):
+    pulse: Union[library.Pulse, np.ndarray], channel: chans.PulseChannel, name: Optional[str] = None,**kwargs):
     """Play a ``pulse`` on a ``channel``.
 
     Examples:
@@ -1720,8 +1719,7 @@ def play(
     """
     if not isinstance(pulse, library.Pulse):
         pulse = library.Waveform(pulse)
-
-    append_instruction(instructions.Play(pulse, channel, name=name))
+    append_instruction(instructions.Play(pulse, channel, name=name,**kwargs))
 
 
 def acquire(
