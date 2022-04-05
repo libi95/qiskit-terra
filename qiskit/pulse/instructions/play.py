@@ -31,7 +31,7 @@ class Play(Instruction):
     cycle time, dt, of the backend.
     """
 
-    def __init__(self, pulse: Pulse, channel: PulseChannel, name: Optional[str] = None):
+    def __init__(self, pulse: Pulse, channel: PulseChannel, name: Optional[str] = None, transition = None, stark_shift_param = None, correct_phase = False,  n_ss_dict = None):
         """Create a new pulse instruction.
 
         Args:
@@ -51,8 +51,11 @@ class Play(Instruction):
             )
         if name is None:
             name = pulse.name
-        super().__init__(operands=(pulse, channel), name=name)
-
+        super().__init__(operands=(pulse, channel), name=name)        
+        self.transition = transition 
+        self.stark_shift_param = stark_shift_param
+        self.correct_phase = correct_phase
+        self.n_ss_dict = n_ss_dict 
     @property
     def pulse(self) -> Pulse:
         """A description of the samples that will be played."""
