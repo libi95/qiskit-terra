@@ -18,6 +18,7 @@ import pkgutil
 import sys
 import warnings
 
+import qiskit
 import qiskit._accelerate
 
 # Globally define compiled modules. The normal import mechanism will not
