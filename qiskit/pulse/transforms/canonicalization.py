@@ -74,6 +74,8 @@ def block_to_schedule(block: ScheduleBlock) -> Schedule:
             if post_buffer > 0:
                 context_boundary = instructions.RelativeBarrier(*op_data.channels)
                 schedule = schedule.append(context_boundary.shift(post_buffer), inplace=True)
+        elif isinstance(op_data, instructions.Call):
+            schedule = schedule.append(op_data.subroutine, inplace=True)    
         else:
             schedule = schedule.append(op_data, inplace=True)            # LB: Don't know why but I had to overwrite this..
 
