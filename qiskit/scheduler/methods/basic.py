@@ -112,13 +112,16 @@ def as_late_as_possible(circuit: QuantumCircuit, schedule_config: ScheduleConfig
 
     last_stop = max(t for t in qubit_time_available.values()) if qubit_time_available else 0
     start_times = [last_stop - t for t in reversed(rev_stop_times)]
-
     timed_schedules = [
         (time, cpd.schedule)
         for time, cpd in zip(start_times, circ_pulse_defs)
         if not isinstance(cpd.schedule, Barrier)
     ]
     schedule = Schedule.initialize_from(circuit)
+
     for time, inst in timed_schedules:
-        schedule.insert(time, inst, inplace=True)
+        print('time', time, 'schedule', inst)
+        schedule = schedule.insert(time, inst, inplace=True)
+
+    print(schedule)
     return schedule
